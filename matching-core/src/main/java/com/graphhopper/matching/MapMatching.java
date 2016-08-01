@@ -17,6 +17,7 @@
  */
 package com.graphhopper.matching;
 
+import com.grab.speed.GrabMapMatchResult;
 import com.graphhopper.routing.DijkstraBidirectionRef;
 import com.graphhopper.routing.Path;
 import com.graphhopper.routing.QueryGraph;
@@ -200,7 +201,19 @@ public class MapMatching {
                 = new MapMatchingHmmProbabilities<GPXExtension, GPXEntry>(timeSteps, spatialMetrics, temporalMetrics, measurementErrorSigma, transitionProbabilityBeta);
         MostLikelySequence<GPXExtension, GPXEntry> seq = Hmm.computeMostLikelySequence(probabilities, timeSteps.iterator());
 
-        List<EdgeMatch> edgeMatches = new ArrayList<EdgeMatch>();
+        List<GrabMapMatchResult> grabMatches = new ArrayList<>();
+        if (!seq.isBroken) {
+            for (int i=0; i < seq.sequence.size(); i++){
+                GrabMapMatchResult grabResult = new GrabMapMatchResult();
+                grabResult.setEdgeId(seq.sequence.get(i).getQueryResult().getClosestEdge().getEdge());
+                grabResult.setSnappedNodeId(seq.sequence.get(i).getQueryResult().getOsrmTrafficNode());
+                grabResult.setOriginIndex(i);
+                grabMatches.add(grabResult);
+            }
+        }
+
+        List<EdgeMatch> edgeMatches = new ArrayList<>();
+
         double distance = 0.0;
         long time = 0;
         if (!seq.isBroken) {
@@ -253,8 +266,9 @@ public class MapMatching {
         MatchResult matchResult = new MatchResult(edgeMatches);
         matchResult.setMatchMillis(time);
         matchResult.setMatchLength(distance);
+        matchResult.setGrabResults(grabMatches);
 
-        //////// Calculate stats to determine quality of matching //////// 
+        //////// Calculate stats to determine quality of matching ////////
         double gpxLength = 0;
         GPXEntry prevEntry = gpxList.get(0);
         for (int i = 1; i < gpxList.size(); i++) {

@@ -52,4 +52,8 @@ public class GPXExtension
 	public GPXEntry getEntry() {
 		return entry;
 	}
+
+    public int getGpxListIndex() {
+        return gpxListIndex;
+    }
 }

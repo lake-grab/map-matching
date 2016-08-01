@@ -17,6 +17,8 @@
  */
 package com.graphhopper.matching;
 
+import com.grab.speed.GrabMapMatchResult;
+
 import java.util.List;
 
 /**
@@ -30,7 +32,8 @@ public class MatchResult {
     private long matchMillis;
     private double gpxEntriesLength;
     private long gpxEntriesMillis;
-
+    private List<GrabMapMatchResult> grabResults;
+    private boolean isBroken;
     public MatchResult(List<EdgeMatch> edgeMatches) {
         setEdgeMatches(edgeMatches);
     }
@@ -92,6 +95,22 @@ public class MatchResult {
      */
     public long getMatchMillis() {
         return matchMillis;
+    }
+
+    public List<GrabMapMatchResult> getGrabResults() {
+        return grabResults;
+    }
+
+    public void setGrabResults(List<GrabMapMatchResult> grabResults) {
+        this.grabResults = grabResults;
+    }
+
+    public boolean isBroken() {
+        return isBroken;
+    }
+
+    public void setIsBroken(boolean isBroken) {
+        this.isBroken = isBroken;
     }
 
     @Override
