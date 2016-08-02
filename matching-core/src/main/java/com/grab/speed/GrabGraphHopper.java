@@ -87,8 +87,8 @@ public class GrabGraphHopper extends GraphHopperOSM {
                     }else {
                         nodeId = 0l;  // osm id equals 0 means no osm id
                      }
-                    if ( super.getInternalNodeToOsrmNodeIdMap().get(wayId) != null ) {
-                        long pointer = 400L * super.getInternalNodeToOsrmNodeIdMap().get(wayId);
+                    if ( super.getOsmWayIdToInternalIdMap().get(wayId) != null ) {
+                        long pointer = 400L * super.getOsmWayIdToInternalIdMap().get(wayId);
                         nodeIndexMapping.ensureCapacity(pointer + 400);
                         nodeIndexMapping.setInt(pointer + 8*i, bitUtil.getIntLow(nodeId));
                         nodeIndexMapping.setInt(pointer + 8*i + 4, bitUtil.getIntHigh(nodeId));
@@ -105,16 +105,10 @@ public class GrabGraphHopper extends GraphHopperOSM {
                 for (long osmNodeId : getInternalNodeToOsrmNodeIdMap().values()) {
                     int internalNodeId = map.get(osmNodeId);
                     if (internalNodeId != EMPTY) {
-                        long pointer = 8L * Math.abs(internalNodeId);
                         if (internalNodeId > 0) {
-                            pillarNodeMapping.ensureCapacity(pointer + 8L);
-                            pillarNodeMapping.setInt(pointer, bitUtil.getIntLow(osmNodeId));
-                            pillarNodeMapping.setInt(pointer + 4, bitUtil.getIntHigh(osmNodeId));
+                            saveMapping(pillarNodeMapping,osmNodeId,internalNodeId);
                         }else {
-
-                            towerNodeMapping.ensureCapacity(pointer + 8L);
-                            towerNodeMapping.setInt(pointer, bitUtil.getIntLow(osmNodeId));
-                            towerNodeMapping.setInt(pointer + 4, bitUtil.getIntHigh(osmNodeId));
+                            saveMapping(towerNodeMapping,osmNodeId,Math.abs(internalNodeId));
                         }
                     }
                 }
@@ -123,10 +117,7 @@ public class GrabGraphHopper extends GraphHopperOSM {
                 for (long osmWayId: super.getOsmWayIdToInternalIdMap().keySet()) {
                     Integer internalWayId = super.getOsmWayIdToInternalIdMap().get(osmWayId);
                     if (internalWayId != null) {
-                        long pointer = 8L * internalWayId;
-                        wayMapping.ensureCapacity(pointer + 8L);
-                        wayMapping.setInt(pointer, bitUtil.getIntLow(osmWayId));
-                        wayMapping.setInt(pointer + 4, bitUtil.getIntHigh(osmWayId));
+                        saveMapping(wayMapping,osmWayId, internalWayId);
                     }
                 }
 
@@ -141,6 +132,13 @@ public class GrabGraphHopper extends GraphHopperOSM {
         };
 
         return initDataReader(reader);
+    }
+
+    private void saveMapping(DataAccess mapping,long osmId, int internalId) {
+        long pointer = 8L * internalId;
+        mapping.ensureCapacity(pointer + 8L);
+        mapping.setInt(pointer, bitUtil.getIntLow(osmId));
+        mapping.setInt(pointer + 4, bitUtil.getIntHigh(osmId));
     }
 
     public long getOsmNodeId(int internalNodeId) {
@@ -176,5 +174,27 @@ public class GrabGraphHopper extends GraphHopperOSM {
             return bitUtil.combineIntsToLong(wayMapping.getInt(pointer), wayMapping.getInt(pointer + 4L));
     }
 
+    public String getAdjacentNodeList(int internalWayId, long startOsmId, long endOsmId) {
+        StringBuilder sb = new StringBuilder();
+        long pointer = 400L * internalWayId;
+        boolean needAddFlag = false;
+        for (long i = 0; i < SIZEOF_WAY_NODES ; i++){
+            long nodeId = bitUtil.combineIntsToLong(nodeIndexMapping.getInt(pointer + 8*i), nodeIndexMapping.getInt(pointer + 8*i + 4));
+            if (nodeId == 0l) {
+                break;
+            }
+            if (startOsmId == nodeId || endOsmId == nodeId) {
+                if (!("").equals(sb.toString())) {
+                    sb.append(nodeId);
+                    break;
+                }
+                needAddFlag = true;
+            }
+            if (needAddFlag) {
+                sb.append(nodeId).append(",");
+            }
+        }
+        return sb.toString();
+    }
 
 }

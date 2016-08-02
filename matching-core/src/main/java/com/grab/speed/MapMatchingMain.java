@@ -1,15 +1,17 @@
 package com.grab.speed;
 
-import com.graphhopper.matching.*;
+import com.graphhopper.matching.LocationIndexMatch;
+import com.graphhopper.matching.MapMatching;
+import com.graphhopper.matching.MatchResult;
 import com.graphhopper.routing.util.FlagEncoder;
 import com.graphhopper.storage.GraphHopperStorage;
 import com.graphhopper.storage.index.LocationIndexTree;
 import com.graphhopper.util.CmdArgs;
-import com.graphhopper.util.EdgeIteratorState;
 import com.graphhopper.util.GPXEntry;
 import com.graphhopper.util.StopWatch;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
@@ -26,7 +28,7 @@ public class MapMatchingMain {
         mockCmdArgs.put("prepare.min_network_size", 200);
         mockCmdArgs.put("prepare.min_one_way_network_size", 200);
 
-        GrabGraphHopper hopper = new GrabGraphHopper();
+        final GrabGraphHopper hopper = new GrabGraphHopper();
         hopper.init(mockCmdArgs);
         hopper.getCHFactoryDecorator().setEnabled(false);
         hopper.importOrLoad();
@@ -39,11 +41,11 @@ public class MapMatchingMain {
         LocationIndexMatch locationIndex = new LocationIndexMatch(graph,
                 (LocationIndexTree) hopper.getLocationIndex(), gpsAccuracy);
 
-        MapMatching mapMatching = new MapMatching(graph, locationIndex, firstEncoder);
+        final MapMatching mapMatching = new MapMatching(graph, locationIndex, firstEncoder);
         mapMatching.setMeasurementErrorSigma(gpsAccuracy);
 
         StopWatch matchSW = new StopWatch();
-        List<GPXEntry> list = new ArrayList<>();
+        final List<GPXEntry> list = new ArrayList<>();
         GPXEntry entry0 = new GPXEntry(1.35086,103.984877,new Date().getTime());
         GPXEntry entry1 = new GPXEntry(1.351064,103.985285,new Date().getTime()+10000);
         GPXEntry entry2 = new GPXEntry(1.351858,103.985596,new Date().getTime()+20000);
@@ -60,44 +62,62 @@ public class MapMatchingMain {
 
         matchSW.start();
         try {
-            MatchResult mr = mapMatching.doWork(list);
+        for (int i=0; i<1; i++) {
+            final List<GPXEntry> mockList = new ArrayList<>(list);
+            Collections.copy(mockList, list);
 
-            // return GraphHopper edges with all associated GPX entries
-            List<EdgeMatch> matches = mr.getEdgeMatches();
-            // now do something with the edges like storing the edgeIds or doing fetchWayGeometry etc
-            for (int i=0;i<matches.size();i++){
-                EdgeIteratorState edgeState = matches.get(i).getEdgeState();
-                System.out.println("----------match edge index:" + edgeState.getEdge() + "----------");
-                System.out.println(edgeState.getName());
-                System.out.println(edgeState.getBaseNode());
-                System.out.println(edgeState.getAdjNode());
-                for (GPXExtension extension: matches.get(i).getGpxExtensions()) {
-                    System.out.println("origin index:" + extension.getGpxListIndex());
-                    System.out.println("query point:" + extension.getQueryResult().getQueryPoint());
-                    System.out.println("snapped point:" + extension.getQueryResult().getSnappedPoint());
-                    System.out.println("closest edge:" + extension.getQueryResult().getClosestEdge().getEdge());
-                    System.out.println("closest internal way:" + hopper.getInternalWayId(extension.getQueryResult().getClosestEdge().getEdge()));
-                    System.out.println("closest osm way:" + hopper.getOsmWayId(hopper.getInternalWayId(extension.getQueryResult().getClosestEdge().getEdge())));
-                    System.out.println("closest node:" + extension.getQueryResult().getClosestNode());
-                    System.out.println("closest osrm id:" + hopper.getOsmNodeId(-(extension.getQueryResult().getOsrmTrafficNode()+3)));
-                    System.out.println("closest way nodes:" + hopper.getOsmNodeIdsByEdge(extension.getQueryResult().getClosestEdge().getEdge()));
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    doMapMatchingDebug(hopper, mapMatching, list);
 
-//                    System.out.println(graph.getNodeAccess().getLat(extension.getQueryResult().getOsrmTrafficNode()) + "," + graph.getNodeAccess().getLon(extension.getQueryResult().getOsrmTrafficNode()));
-                    System.out.println("");
-                    System.out.println("");
                 }
-            }
-//            for (GrabMapMatchResult grabMapMatchResult: mr.getGrabResults()) {
-//                System.out.println("origin index:" + grabMapMatchResult.getOriginIndex());
-//                System.out.println("edge:" + grabMapMatchResult.getEdgeId());
-//                System.out.println("snap node:" + hopper.getOSMNodeId(-(grabMapMatchResult.getSnappedNodeId()+3)));
-//                System.out.println("");
-//            }
+            }).start();
+        }
         } catch (Exception ex) {
             ex.printStackTrace();
         } finally {
             matchSW.stop();
         }
-        System.out.println("match took: " + matchSW.getSeconds() + " s");
+        System.out.println("match took: " + matchSW.getNanos()/1000l + "ms");
+    }
+
+    private static void doMapMatchingDebug(GrabGraphHopper hopper, MapMatching mapMatching, List<GPXEntry> list) {
+        MatchResult mr = mapMatching.doWork(list);
+        if (!mr.getGrabResults().isEmpty() && mr.getGrabResults().size() >=2) {
+            for (int i = 0; i < mr.getGrabResults().size() - 1; i++) {
+                StringBuilder originCoordinates = new StringBuilder();
+                originCoordinates.append("origin:").append("\n");
+                StringBuilder snappedCoordinates = new StringBuilder();
+                snappedCoordinates.append("snapped:").append("\n");
+
+
+                int startWay = hopper.getInternalWayId(mr.getGrabResults().get(i).getSnappedEdgeId());
+                int endWay = hopper.getInternalWayId(mr.getGrabResults().get(i + 1).getSnappedEdgeId());
+                if (startWay == endWay) {
+
+                    long startOsmNodeId = hopper.getOsmNodeId(-(mr.getGrabResults().get(i).getSnappedTowerNodeId() + 3));
+                    long endOsmNodeId = hopper.getOsmNodeId(-(mr.getGrabResults().get(i+1).getSnappedTowerNodeId() + 3));
+                    if (startOsmNodeId != endOsmNodeId) {
+                        String nodes = hopper.getAdjacentNodeList(startWay, startOsmNodeId, endOsmNodeId);
+                        if (!"".equals(nodes)) {
+
+                            originCoordinates.append(mr.getGrabResults().get(i).getOriginCoordinate()).append("\n");
+                            originCoordinates.append(mr.getGrabResults().get(i+1).getOriginCoordinate()).append("\n");
+                            snappedCoordinates.append(mr.getGrabResults().get(i).getSnappedCoordinate()).append("\n");
+                            snappedCoordinates.append(mr.getGrabResults().get(i+1).getSnappedCoordinate()).append("\n");
+                            System.out.println();
+                            System.out.print(nodes);
+                            System.out.println();
+                            System.out.println();
+                            System.out.println(originCoordinates.toString());
+                            System.out.println(snappedCoordinates.toString());
+                            System.out.println("avg speed:" + (mr.getGrabResults().get(i+1).getTime() - mr.getGrabResults().get(i).getTime()));
+
+                        }
+                    }
+                }
+            }
+        }
     }
 }
