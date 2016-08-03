@@ -6,9 +6,7 @@ import com.graphhopper.matching.MatchResult;
 import com.graphhopper.routing.util.FlagEncoder;
 import com.graphhopper.storage.GraphHopperStorage;
 import com.graphhopper.storage.index.LocationIndexTree;
-import com.graphhopper.util.CmdArgs;
-import com.graphhopper.util.GPXEntry;
-import com.graphhopper.util.StopWatch;
+import com.graphhopper.util.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,6 +17,9 @@ import java.util.List;
  * Created by hubo on 16/7/25.
  */
 public class MapMatchingMain {
+
+    final static DistanceCalc distanceCalc = new DistancePlaneProjection();
+
     public static void main(String[] args){
         // import OpenStreetMap data
         CmdArgs mockCmdArgs = new CmdArgs();
@@ -85,39 +86,33 @@ public class MapMatchingMain {
     private static void doMapMatchingDebug(GrabGraphHopper hopper, MapMatching mapMatching, List<GPXEntry> list) {
         MatchResult mr = mapMatching.doWork(list);
         if (!mr.getGrabResults().isEmpty() && mr.getGrabResults().size() >=2) {
-            for (int i = 0; i < mr.getGrabResults().size() - 1; i++) {
-                StringBuilder originCoordinates = new StringBuilder();
-                originCoordinates.append("origin:").append("\n");
-                StringBuilder snappedCoordinates = new StringBuilder();
-                snappedCoordinates.append("snapped:").append("\n");
+            StringBuilder originCoordinates = new StringBuilder();
+            originCoordinates.append("origin:").append("\n");
+            StringBuilder snappedCoordinates = new StringBuilder();
+            snappedCoordinates.append("snapped:").append("\n");
 
+            for (int i = 0; i < mr.getGrabResults().size() - 1; i++) {
+                originCoordinates.append(mr.getGrabResults().get(i).getOriginCoordinate()).append("\n");
+                snappedCoordinates.append(mr.getGrabResults().get(i).getSnappedCoordinate()).append("\n");
 
                 int startWay = hopper.getInternalWayId(mr.getGrabResults().get(i).getSnappedEdgeId());
                 int endWay = hopper.getInternalWayId(mr.getGrabResults().get(i + 1).getSnappedEdgeId());
                 if (startWay == endWay) {
-
-                    long startOsmNodeId = hopper.getOsmNodeId(-(mr.getGrabResults().get(i).getSnappedTowerNodeId() + 3));
-                    long endOsmNodeId = hopper.getOsmNodeId(-(mr.getGrabResults().get(i+1).getSnappedTowerNodeId() + 3));
-                    if (startOsmNodeId != endOsmNodeId) {
-                        String nodes = hopper.getAdjacentNodeList(startWay, startOsmNodeId, endOsmNodeId);
-                        if (!"".equals(nodes)) {
-
-                            originCoordinates.append(mr.getGrabResults().get(i).getOriginCoordinate()).append("\n");
-                            originCoordinates.append(mr.getGrabResults().get(i+1).getOriginCoordinate()).append("\n");
-                            snappedCoordinates.append(mr.getGrabResults().get(i).getSnappedCoordinate()).append("\n");
-                            snappedCoordinates.append(mr.getGrabResults().get(i+1).getSnappedCoordinate()).append("\n");
-                            System.out.println();
-                            System.out.print(nodes);
-                            System.out.println();
-                            System.out.println();
-                            System.out.println(originCoordinates.toString());
-                            System.out.println(snappedCoordinates.toString());
-                            System.out.println("avg speed:" + (mr.getGrabResults().get(i+1).getTime() - mr.getGrabResults().get(i).getTime()));
-
-                        }
+                    String nodes = hopper.getAdjacentNodeList(startWay, mr.getGrabResults().get(i).getSnappedLat(),mr.getGrabResults().get(i).getSnappedLon(),mr.getGrabResults().get(i+1).getSnappedLat(),mr.getGrabResults().get(i+1).getSnappedLon());
+                    if (!"".equals(nodes)) {
+                        System.out.println();
+                        System.out.print(nodes);
+                        System.out.println();
+                        System.out.println();
+                        System.out.println("distance:" + distanceCalc.calcDist(mr.getGrabResults().get(i).getSnappedLat(),mr.getGrabResults().get(i).getSnappedLon(),mr.getGrabResults().get(i+1).getSnappedLat(),mr.getGrabResults().get(i+1).getSnappedLon()));
                     }
                 }
             }
+            originCoordinates.append(mr.getGrabResults().get(mr.getGrabResults().size()-1).getOriginCoordinate()).append("\n");
+            snappedCoordinates.append(mr.getGrabResults().get(mr.getGrabResults().size()-1).getSnappedCoordinate()).append("\n");
+            System.out.println();
+            System.out.println(originCoordinates.toString());
+            System.out.println(snappedCoordinates.toString());
         }
     }
 }

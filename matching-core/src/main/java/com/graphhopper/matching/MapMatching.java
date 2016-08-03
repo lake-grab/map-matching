@@ -209,9 +209,10 @@ public class MapMatching {
                 grabResult.setTime(seq.sequence.get(i).getEntry().getTime());
                 grabResult.setSnappedEdgeId(seq.sequence.get(i).getQueryResult().getClosestEdge().getEdge());
                 grabResult.setSnappedTowerNodeId(seq.sequence.get(i).getQueryResult().getOsrmTrafficNode());
-                grabResult.setOriginCoordinate(seq.sequence.get(i).getEntry().getLat() + "," + seq.sequence.get(i).getEntry().getLon());
-                grabResult.setSnappedCoordinate(seq.sequence.get(i).getQueryResult().getSnappedPoint().getLat()+","+seq.sequence.get(i).getQueryResult().getSnappedPoint().getLon());
-
+                grabResult.setOriginLat(seq.sequence.get(i).getEntry().getLat());
+                grabResult.setOriginLon(seq.sequence.get(i).getEntry().getLon());
+                grabResult.setSnappedLat(seq.sequence.get(i).getQueryResult().getSnappedPoint().getLat());
+                grabResult.setSnappedLon(seq.sequence.get(i).getQueryResult().getSnappedPoint().getLon());
                 grabMatches.add(grabResult);
             }
         }else {
