@@ -12,7 +12,9 @@ import com.graphhopper.storage.GraphHopperStorage;
 import com.graphhopper.util.*;
 import gnu.trove.list.TLongList;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * Created by hubo on 16/7/27.
@@ -222,7 +224,7 @@ public class GrabGraphHopper extends GraphHopperOSM {
             return bitUtil.combineIntsToLong(wayMapping.getInt(pointer + LONG_LOW_INT) , wayMapping.getInt(pointer + LONG_HIGH_INT));
     }
 
-    public String getAdjacentNodeList(int internalWayId, long startOsmId, long endOsmId) {
+    public String getAdjacentNodeListByOsmIDs(int internalWayId, long startOsmId, long endOsmId) {
         StringBuilder sb = new StringBuilder();
         long pointer = 400L * internalWayId;
         boolean needAddFlag = false;
@@ -257,9 +259,9 @@ public class GrabGraphHopper extends GraphHopperOSM {
         return Helper.intToDegree(intVal);
     }
 
-    public String getAdjacentNodeList(int internalWayId, double startLat, double startLon, double endLat, double endLon) {
-        StringBuilder sb = new StringBuilder();
-        long[] nodes = new long[SIZEOF_WAY_NODES];
+    public List<Long> getAdjacentNodeList(int internalWayId, double startLat, double startLon, double endLat, double endLon) {
+        List<Long> nodes = new ArrayList<>();
+        long[] wayNodes = new long[SIZEOF_WAY_NODES];
         double closestStartDistance = Double.MAX_VALUE;
         double closestEndDistance = Double.MAX_VALUE;
         int closestStartIndex = -1;
@@ -274,7 +276,7 @@ public class GrabGraphHopper extends GraphHopperOSM {
             if (nodeId == 0l) {
                 break;
             }
-            nodes[i] = nodeId;
+            wayNodes[i] = nodeId;
             Integer internalNodeId = osmNodeIdToInternalMap.get(nodeId);
             if (internalNodeId == null) {
                 continue;
@@ -301,16 +303,24 @@ public class GrabGraphHopper extends GraphHopperOSM {
         if (closestStartIndex != closestEndIndex) {
             if (closestStartIndex < closestEndIndex) {
                 for (int wayIndex=closestStartIndex; wayIndex <= closestEndIndex; wayIndex++) {
-                    sb.append(nodes[wayIndex]).append(",");
+                    nodes.add(wayNodes[wayIndex]);
                 }
             }else {
                 for (int wayIndex=closestStartIndex; wayIndex >= closestEndIndex; wayIndex--) {
-                    sb.append(nodes[wayIndex]).append(",");
+                    nodes.add(wayNodes[wayIndex]);
                 }
             }
+        }else {
+            if (closestStartIndex > 0) {
+                nodes.add(wayNodes[closestStartIndex--]);
+                nodes.add(wayNodes[closestStartIndex]);
+            } else {
+                nodes.add(wayNodes[closestStartIndex]);
+                nodes.add(wayNodes[closestStartIndex++]);
+            }
+
         }
-        nodes = null;
-        return sb.toString().length() > 0 ? sb.toString().substring(0, sb.toString().length()-1):sb.toString();
+        return nodes;
     }
 
 }

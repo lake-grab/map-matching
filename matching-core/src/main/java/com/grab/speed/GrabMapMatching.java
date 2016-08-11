@@ -10,13 +10,12 @@ import com.graphhopper.util.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.List;
 
 /**
  * Created by hubo on 16/7/25.
  */
-public class MapMatchingMain {
+public class GrabMapMatching {
 
     final static DistanceCalc distanceCalc = new DistancePlaneProjection();
 
@@ -47,19 +46,27 @@ public class MapMatchingMain {
 
         StopWatch matchSW = new StopWatch();
         final List<GPXEntry> list = new ArrayList<>();
-        GPXEntry entry0 = new GPXEntry(1.35086,103.984877,new Date().getTime());
-        GPXEntry entry1 = new GPXEntry(1.351064,103.985285,new Date().getTime()+10000);
-        GPXEntry entry2 = new GPXEntry(1.351858,103.985596,new Date().getTime()+20000);
-        GPXEntry entry3 = new GPXEntry(1.352351,103.985671,new Date().getTime()+30000);
-        GPXEntry entry4 = new GPXEntry(1.352888,103.986003,new Date().getTime()+40000);
-        GPXEntry entry5 = new GPXEntry(1.353038,103.986229,new Date().getTime()+50000);
+        GPXEntry entry0 = new GPXEntry(1.314472,103.879013,1462032002);
+        GPXEntry entry1 = new GPXEntry(1.357697,103.958711,1462032003);
+        GPXEntry entry2 = new GPXEntry(1.275028,103.814815,1462032003);
+//        GPXEntry entry3 = new GPXEntry(1.342298,103.982109,1462032004);
+//        GPXEntry entry4 = new GPXEntry(1.282792,103.859626,1462032005);
+//        GPXEntry entry5 = new GPXEntry(1.328499,103.840244,1462032006);
+//        GPXEntry entry6 = new GPXEntry(1.389726,103.745281,1462032009);
+//        GPXEntry entry7 = new GPXEntry(1.300272,103.834707,1462032010);
+//        GPXEntry entry8 = new GPXEntry(1.381037,103.754359,1462032010);
+//        GPXEntry entry9 = new GPXEntry(1.290513,103.84712, 1462032011);
 
         list.add(entry0);
         list.add(entry1);
         list.add(entry2);
-        list.add(entry3);
-        list.add(entry4);
-        list.add(entry5);
+//        list.add(entry3);
+//        list.add(entry4);
+//        list.add(entry5);
+//        list.add(entry6);
+//        list.add(entry7);
+//        list.add(entry8);
+//        list.add(entry9);
 
         matchSW.start();
         try {
@@ -98,8 +105,8 @@ public class MapMatchingMain {
                 int startWay = hopper.getInternalWayId(mr.getGrabResults().get(i).getSnappedEdgeId());
                 int endWay = hopper.getInternalWayId(mr.getGrabResults().get(i + 1).getSnappedEdgeId());
                 if (startWay == endWay) {
-                    String nodes = hopper.getAdjacentNodeList(startWay, mr.getGrabResults().get(i).getSnappedLat(),mr.getGrabResults().get(i).getSnappedLon(),mr.getGrabResults().get(i+1).getSnappedLat(),mr.getGrabResults().get(i+1).getSnappedLon());
-                    if (!"".equals(nodes)) {
+                    List<Long> nodes = hopper.getAdjacentNodeList(startWay, mr.getGrabResults().get(i).getSnappedLat(),mr.getGrabResults().get(i).getSnappedLon(),mr.getGrabResults().get(i+1).getSnappedLat(),mr.getGrabResults().get(i+1).getSnappedLon());
+                    if (!nodes.isEmpty()) {
                         System.out.println();
                         System.out.print(nodes);
                         System.out.println();
@@ -114,5 +121,10 @@ public class MapMatchingMain {
             System.out.println(originCoordinates.toString());
             System.out.println(snappedCoordinates.toString());
         }
+    }
+
+    public static List<GrabMapMatchResult> doMapMatching(MapMatching mapMatching, List<GPXEntry> list) {
+        MatchResult mr = mapMatching.doWork(list);
+        return mr.getGrabResults();
     }
 }

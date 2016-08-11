@@ -72,7 +72,6 @@ public class MapMatching {
     private final int nodeCount;
     private DistanceCalc distanceCalc = new DistancePlaneProjection();
     private Weighting weighting;
-    private static final List<EdgeMatch> mockMatches = new ArrayList<>();
 
     public MapMatching(Graph graph, LocationIndexMatch locationIndex, FlagEncoder encoder) {
         this.graph = graph;
@@ -202,6 +201,10 @@ public class MapMatching {
         MostLikelySequence<GPXExtension, GPXEntry> seq = Hmm.computeMostLikelySequence(probabilities, timeSteps.iterator());
 
         List<GrabMapMatchResult> grabMatches = new ArrayList<>();
+
+        List<EdgeMatch> edgeMatches = new ArrayList<EdgeMatch>();
+        double distance = 0.0;
+        long time = 0;
         if (!seq.isBroken) {
             for (int i=0; i < seq.sequence.size(); i++){
                 GrabMapMatchResult grabResult = new GrabMapMatchResult();
@@ -215,12 +218,79 @@ public class MapMatching {
                 grabResult.setSnappedLon(seq.sequence.get(i).getQueryResult().getSnappedPoint().getLon());
                 grabMatches.add(grabResult);
             }
+
+            //origin version keep for test
+            // every virtual edge maps to its real edge where the orientation is already correct!
+            // TODO use traversal key instead of string!
+            Map<String, EdgeIteratorState> virtualEdgesMap = new HashMap<String, EdgeIteratorState>();
+            final EdgeExplorer explorer = queryGraph.createEdgeExplorer(edgeFilter);
+            for (QueryResult candidate : allCandidates) {
+                fillVirtualEdges(virtualEdgesMap, explorer, candidate);
+            }
+
+            EdgeIteratorState currentEdge = null;
+            List<GPXExtension> gpxExtensions = new ArrayList<GPXExtension>();
+            GPXExtension queryResult = seq.sequence.get(0);
+            gpxExtensions.add(queryResult);
+            for (int j = 1; j < seq.sequence.size(); j++) {
+                GPXExtension nextQueryResult = seq.sequence.get(j);
+                Path path = paths.get(hash(queryResult.getQueryResult(), nextQueryResult.getQueryResult()));
+                distance += path.getDistance();
+                time += path.getTime();
+                for (EdgeIteratorState edgeIteratorState : path.calcEdges()) {
+                    EdgeIteratorState directedRealEdge = resolveToRealEdge(virtualEdgesMap, edgeIteratorState);
+                    if (directedRealEdge == null) {
+                        throw new RuntimeException("Did not find real edge for " + edgeIteratorState.getEdge());
+                    }
+                    if (currentEdge == null || !equalEdges(directedRealEdge, currentEdge)) {
+                        if (currentEdge != null) {
+                            EdgeMatch edgeMatch = new EdgeMatch(currentEdge, gpxExtensions);
+                            edgeMatches.add(edgeMatch);
+                            gpxExtensions = new ArrayList<GPXExtension>();
+                        }
+                        currentEdge = directedRealEdge;
+                    }
+                }
+                gpxExtensions.add(nextQueryResult);
+                queryResult = nextQueryResult;
+            }
+            if (edgeMatches.isEmpty()) {
+                throw new IllegalStateException("No edge matches found for path. Too short? Sequence size " + seq.sequence.size());
+            }
+            EdgeMatch lastEdgeMatch = edgeMatches.get(edgeMatches.size() - 1);
+            if (!gpxExtensions.isEmpty() && !equalEdges(currentEdge, lastEdgeMatch.getEdgeState())) {
+                edgeMatches.add(new EdgeMatch(currentEdge, gpxExtensions));
+            } else {
+                lastEdgeMatch.getGpxExtensions().addAll(gpxExtensions);
+            }
+
+
         }else {
             throw new RuntimeException("Sequence is broken for GPX with " + gpxList.size() + " points resulting in " + timeSteps.size() + " time steps");
         }
 
-        MatchResult matchResult = new MatchResult(mockMatches);
+
+        MatchResult matchResult = new MatchResult(edgeMatches);
         matchResult.setGrabResults(grabMatches);
+
+        //origin version for test
+
+        matchResult.setMatchMillis(time);
+        matchResult.setMatchLength(distance);
+
+        //////// Calculate stats to determine quality of matching ////////
+        double gpxLength = 0;
+        GPXEntry prevEntry = gpxList.get(0);
+        for (int i = 1; i < gpxList.size(); i++) {
+            GPXEntry entry = gpxList.get(i);
+            gpxLength += distanceCalc.calcDist(prevEntry.lat, prevEntry.lon, entry.lat, entry.lon);
+            prevEntry = entry;
+        }
+
+        long gpxMillis = gpxList.get(gpxList.size() - 1).getTime() - gpxList.get(0).getTime();
+        matchResult.setGPXEntriesMillis(gpxMillis);
+        matchResult.setGPXEntriesLength(gpxLength);
+
         return matchResult;
     }
 
