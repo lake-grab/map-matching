@@ -49,24 +49,24 @@ public class GrabMapMatching {
         GPXEntry entry0 = new GPXEntry(1.314472,103.879013,1462032002);
         GPXEntry entry1 = new GPXEntry(1.357697,103.958711,1462032003);
         GPXEntry entry2 = new GPXEntry(1.275028,103.814815,1462032003);
-//        GPXEntry entry3 = new GPXEntry(1.342298,103.982109,1462032004);
-//        GPXEntry entry4 = new GPXEntry(1.282792,103.859626,1462032005);
-//        GPXEntry entry5 = new GPXEntry(1.328499,103.840244,1462032006);
-//        GPXEntry entry6 = new GPXEntry(1.389726,103.745281,1462032009);
-//        GPXEntry entry7 = new GPXEntry(1.300272,103.834707,1462032010);
-//        GPXEntry entry8 = new GPXEntry(1.381037,103.754359,1462032010);
-//        GPXEntry entry9 = new GPXEntry(1.290513,103.84712, 1462032011);
+        GPXEntry entry3 = new GPXEntry(1.342298,103.982109,1462032004);
+        GPXEntry entry4 = new GPXEntry(1.282792,103.859626,1462032005);
+        GPXEntry entry5 = new GPXEntry(1.328499,103.840244,1462032006);
+        GPXEntry entry6 = new GPXEntry(1.389726,103.745281,1462032009);
+        GPXEntry entry7 = new GPXEntry(1.300272,103.834707,1462032010);
+        GPXEntry entry8 = new GPXEntry(1.381037,103.754359,1462032010);
+        GPXEntry entry9 = new GPXEntry(1.290513,103.84712, 1462032011);
 
         list.add(entry0);
         list.add(entry1);
         list.add(entry2);
-//        list.add(entry3);
-//        list.add(entry4);
-//        list.add(entry5);
-//        list.add(entry6);
-//        list.add(entry7);
-//        list.add(entry8);
-//        list.add(entry9);
+        list.add(entry3);
+        list.add(entry4);
+        list.add(entry5);
+        list.add(entry6);
+        list.add(entry7);
+        list.add(entry8);
+        list.add(entry9);
 
         matchSW.start();
         try {

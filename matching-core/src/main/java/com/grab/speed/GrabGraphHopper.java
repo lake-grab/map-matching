@@ -12,9 +12,7 @@ import com.graphhopper.storage.GraphHopperStorage;
 import com.graphhopper.util.*;
 import gnu.trove.list.TLongList;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 /**
  * Created by hubo on 16/7/27.
@@ -224,31 +222,6 @@ public class GrabGraphHopper extends GraphHopperOSM {
             return bitUtil.combineIntsToLong(wayMapping.getInt(pointer + LONG_LOW_INT) , wayMapping.getInt(pointer + LONG_HIGH_INT));
     }
 
-    public String getAdjacentNodeListByOsmIDs(int internalWayId, long startOsmId, long endOsmId) {
-        StringBuilder sb = new StringBuilder();
-        long pointer = 400L * internalWayId;
-        boolean needAddFlag = false;
-        for (long i = 0; i < SIZEOF_WAY_NODES ; i++){
-            long nodeId = bitUtil.combineIntsToLong(nodeIndexMapping.getInt(pointer + LONG_SIZE_IN_BYTES * i + LONG_LOW_INT), nodeIndexMapping.getInt(pointer + LONG_SIZE_IN_BYTES * i + LONG_HIGH_INT));
-            if (nodeId == 0l) {
-                break;
-            }
-            if (startOsmId == nodeId || endOsmId == nodeId) {
-                if (!("").equals(sb.toString())) {
-                    sb.append(nodeId);
-                    break;
-                }
-                needAddFlag = true;
-            }
-            if (needAddFlag) {
-                int internalId = osmNodeIdToInternalMap.get(nodeId);
-                System.out.println(super.getGraphHopperStorage().getNodeAccess().getLat(-internalId-3)+","+super.getGraphHopperStorage().getNodeAccess().getLon(-internalId-3));
-                sb.append(nodeId).append(",");
-            }
-        }
-        return sb.toString();
-    }
-
     public double getPillarNodeLat(int internalNodeId) {
         int intVal = pillarNodeInfoMapping.getInt(internalNodeId * LONG_SIZE_IN_BYTES + LAT);
         return Helper.intToDegree(intVal);
@@ -321,6 +294,38 @@ public class GrabGraphHopper extends GraphHopperOSM {
 
         }
         return nodes;
+    }
+
+    public Long findCrossNode(int startInternalWayId, int endInternalWayId) {
+        Set<Long> startWayNodeSet = new HashSet<>(SIZEOF_WAY_NODES);
+
+        long startPointer = 400L * startInternalWayId;
+        long endPointer = 400L * endInternalWayId;
+
+        for (int i=0; i < SIZEOF_WAY_NODES; i++) {
+            long startNodeId = bitUtil.combineIntsToLong(nodeIndexMapping.getInt(startPointer + LONG_SIZE_IN_BYTES * i + LONG_LOW_INT), nodeIndexMapping.getInt(startPointer + LONG_SIZE_IN_BYTES * i + LONG_HIGH_INT));
+            if (startNodeId != 0) {
+                startWayNodeSet.add(startNodeId);
+            }else {
+                break;
+            }
+        }
+
+        for (int i=0; i < SIZEOF_WAY_NODES; i++) {
+            long endNodeId = bitUtil.combineIntsToLong(nodeIndexMapping.getInt(endPointer + LONG_SIZE_IN_BYTES * i + LONG_LOW_INT), nodeIndexMapping.getInt(endPointer + LONG_SIZE_IN_BYTES * i + LONG_HIGH_INT));
+            if (endNodeId != 0) {
+                if (startWayNodeSet.contains(endNodeId)) {
+                    return endNodeId;
+                }
+            }else {
+                break;
+            }
+        }
+        return null;
+    }
+
+    public LongIntMap getOsmNodeIdToInternalMap() {
+        return osmNodeIdToInternalMap;
     }
 
 }
