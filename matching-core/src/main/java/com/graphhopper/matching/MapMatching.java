@@ -65,7 +65,8 @@ public class MapMatching {
     private final FlagEncoder encoder;
     private final TraversalMode traversalMode;
 
-    private double measurementErrorSigma = 40.0;
+    private double measurementErrorSigma = 40;
+    private double grabMeasurementErrorSigma = 10;
 
     private double transitionProbabilityBeta = 0.00959442;
     private int maxVisitedNodes = 800;
@@ -114,6 +115,7 @@ public class MapMatching {
      */
     public void setMeasurementErrorSigma(double measurementErrorSigma) {
         this.measurementErrorSigma = measurementErrorSigma;
+        this.grabMeasurementErrorSigma = measurementErrorSigma;
     }
 
     public void setMaxVisitedNodes(int maxNodesToVisit) {
@@ -200,25 +202,10 @@ public class MapMatching {
                 = new MapMatchingHmmProbabilities<GPXExtension, GPXEntry>(timeSteps, spatialMetrics, temporalMetrics, measurementErrorSigma, transitionProbabilityBeta);
         MostLikelySequence<GPXExtension, GPXEntry> seq = Hmm.computeMostLikelySequence(probabilities, timeSteps.iterator());
 
-        List<GrabMapMatchResult> grabMatches = new ArrayList<>();
-
         List<EdgeMatch> edgeMatches = new ArrayList<EdgeMatch>();
         double distance = 0.0;
         long time = 0;
         if (!seq.isBroken) {
-            for (int i=0; i < seq.sequence.size(); i++){
-                GrabMapMatchResult grabResult = new GrabMapMatchResult();
-                grabResult.setOriginIndex(i);
-                grabResult.setTime(seq.sequence.get(i).getEntry().getTime());
-                grabResult.setSnappedEdgeId(seq.sequence.get(i).getQueryResult().getClosestEdge().getEdge());
-                grabResult.setSnappedTowerNodeId(seq.sequence.get(i).getQueryResult().getOsrmTrafficNode());
-                grabResult.setOriginLat(seq.sequence.get(i).getEntry().getLat());
-                grabResult.setOriginLon(seq.sequence.get(i).getEntry().getLon());
-                grabResult.setSnappedLat(seq.sequence.get(i).getQueryResult().getSnappedPoint().getLat());
-                grabResult.setSnappedLon(seq.sequence.get(i).getQueryResult().getSnappedPoint().getLon());
-                grabMatches.add(grabResult);
-            }
-
             //origin version keep for test
             // every virtual edge maps to its real edge where the orientation is already correct!
             // TODO use traversal key instead of string!
@@ -271,10 +258,6 @@ public class MapMatching {
 
 
         MatchResult matchResult = new MatchResult(edgeMatches);
-        matchResult.setGrabResults(grabMatches);
-
-        //origin version for test
-
         matchResult.setMatchMillis(time);
         matchResult.setMatchLength(distance);
 
@@ -393,4 +376,114 @@ public class MapMatching {
             return p;
         }
     }
+
+    /**
+     * This method does the actual map matchting.
+     * <p>
+     * @param gpxList the input list with GPX points which should match to edges
+     * of the graph specified in the constructor
+     */
+    public MatchResult doGrabWork(List<GPXEntry> gpxList) {
+        EdgeFilter edgeFilter = new DefaultEdgeFilter(encoder);
+        List<TimeStep<GPXExtension, GPXEntry>> timeSteps = new ArrayList<TimeStep<GPXExtension, GPXEntry>>();
+        List<QueryResult> allCandidates = new ArrayList<QueryResult>();
+        final Map<String, Path> paths = new HashMap<String, Path>();
+        GPXEntry previous = null;
+        int indexGPX = 0;
+        for (GPXEntry entry : gpxList) {
+            if (previous == null
+                    || distanceCalc.calcDist(previous.getLat(), previous.getLon(), entry.getLat(), entry.getLon()) > 2 * grabMeasurementErrorSigma
+                    // always include last point
+                    || indexGPX == gpxList.size() - 1) {
+                List<QueryResult> candidates = locationIndex.findNClosest(entry.lat, entry.lon, edgeFilter);
+                allCandidates.addAll(candidates);
+                List<GPXExtension> gpxExtensions = new ArrayList<GPXExtension>();
+                for (QueryResult candidate : candidates) {
+                    gpxExtensions.add(new GPXExtension(entry, candidate, indexGPX));
+                }
+
+                TimeStep<GPXExtension, GPXEntry> timeStep = new TimeStep<GPXExtension, GPXEntry>(entry, gpxExtensions);
+                timeSteps.add(timeStep);
+                previous = entry;
+            }
+            indexGPX++;
+        }
+        if (allCandidates.size() < 2) {
+            throw new IllegalArgumentException("To few matching coordinates (" + allCandidates.size() + "). Wrong region imported?");
+        }
+        if (timeSteps.size() < 2) {
+            throw new IllegalStateException("Coordinates produced too few time steps " + timeSteps.size() + ", gpxList:" + gpxList.size());
+        }
+
+        TemporalMetrics<GPXEntry> temporalMetrics = new TemporalMetrics<GPXEntry>() {
+            @Override
+            public double timeDifference(GPXEntry m1, GPXEntry m2) {
+                // time difference in seconds
+                double deltaTs = (m2.getTime() - m1.getTime()) / 1000.0;
+                return deltaTs;
+            }
+        };
+        final QueryGraph queryGraph = new QueryGraph(graph).
+                setUseEdgeExplorerCache(true);
+        queryGraph.lookup(allCandidates);
+        SpatialMetrics<GPXExtension, GPXEntry> spatialMetrics = new SpatialMetrics<GPXExtension, GPXEntry>() {
+            @Override
+            public double measurementDistance(GPXExtension roadPosition, GPXEntry measurement) {
+                // road distance difference in meters
+                return roadPosition.getQueryResult().getQueryDistance();
+            }
+
+            @Override
+            public double linearDistance(GPXEntry formerMeasurement, GPXEntry laterMeasurement) {
+                // beeline distance difference in meters
+                return distanceCalc.calcDist(formerMeasurement.lat, formerMeasurement.lon, laterMeasurement.lat, laterMeasurement.lon);
+            }
+
+            @Override
+            public Double routeLength(GPXExtension sourcePosition, GPXExtension targetPosition) {
+                DijkstraBidirectionRef algo = new DijkstraBidirectionRef(queryGraph, encoder, weighting, traversalMode);
+                algo.setMaxVisitedNodes(maxVisitedNodes);
+                Path path = algo.calcPath(sourcePosition.getQueryResult().getClosestNode(), targetPosition.getQueryResult().getClosestNode());
+
+                paths.put(hash(sourcePosition.getQueryResult(), targetPosition.getQueryResult()), path);
+
+                if (!path.isFound()) {
+                    return Double.POSITIVE_INFINITY;
+                }
+                return path.getDistance();
+            }
+        };
+        MapMatchingHmmProbabilities<GPXExtension, GPXEntry> probabilities
+                = new MapMatchingHmmProbabilities<GPXExtension, GPXEntry>(timeSteps, spatialMetrics, temporalMetrics, grabMeasurementErrorSigma, transitionProbabilityBeta);
+        MostLikelySequence<GPXExtension, GPXEntry> seq = Hmm.computeMostLikelySequence(probabilities, timeSteps.iterator());
+
+        List<GrabMapMatchResult> grabMatches = new ArrayList<>();
+
+        List<EdgeMatch> edgeMatches = new ArrayList<EdgeMatch>();
+
+        if (!seq.isBroken) {
+            for (int i=0; i < seq.sequence.size(); i++){
+                GrabMapMatchResult grabResult = new GrabMapMatchResult();
+                grabResult.setOriginIndex(i);
+                grabResult.setTime(seq.sequence.get(i).getEntry().getTime());
+                grabResult.setSnappedEdgeId(seq.sequence.get(i).getQueryResult().getClosestEdge().getEdge());
+                grabResult.setSnappedTowerNodeId(seq.sequence.get(i).getQueryResult().getOsrmTrafficNode());
+                grabResult.setOriginLat(seq.sequence.get(i).getEntry().getLat());
+                grabResult.setOriginLon(seq.sequence.get(i).getEntry().getLon());
+                grabResult.setSnappedLat(seq.sequence.get(i).getQueryResult().getSnappedPoint().getLat());
+                grabResult.setSnappedLon(seq.sequence.get(i).getQueryResult().getSnappedPoint().getLon());
+                grabMatches.add(grabResult);
+            }
+
+        }else {
+            throw new RuntimeException("Sequence is broken for GPX with " + gpxList.size() + " points resulting in " + timeSteps.size() + " time steps");
+        }
+
+
+        MatchResult matchResult = new MatchResult(edgeMatches);
+        matchResult.setGrabResults(grabMatches);
+
+        return matchResult;
+    }
+
 }

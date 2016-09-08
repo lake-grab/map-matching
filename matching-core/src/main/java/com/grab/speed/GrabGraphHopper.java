@@ -239,8 +239,12 @@ public class GrabGraphHopper extends GraphHopperOSM {
         double closestEndDistance = Double.MAX_VALUE;
         int closestStartIndex = -1;
         int closestEndIndex = -1;
-        double toCalculateLat;
-        double toCalculateLon;
+        int secondClosestStartIndex = -1;
+        int secondClosestEndIndex = -1;
+        Double toCalculateLat;
+        Double toCalculateLon;
+        boolean forwardDirection = true;
+
 
         long pointer = 400L * internalWayId;
 
@@ -254,46 +258,84 @@ public class GrabGraphHopper extends GraphHopperOSM {
             if (internalNodeId == null) {
                 continue;
             }
-            if (internalNodeId > 0) {
-                toCalculateLat = this.getPillarNodeLat(internalNodeId);
-                toCalculateLon = this.getPillarNodeLon(internalNodeId);
-            }else {
-                toCalculateLat = super.getGraphHopperStorage().getNodeAccess().getLat(-internalNodeId-3);
-                toCalculateLon = super.getGraphHopperStorage().getNodeAccess().getLon(-internalNodeId - 3);
+            toCalculateLat = getLatByInternalNodeId(internalNodeId);
+            toCalculateLon = getLonByInternalNodeId(internalNodeId);
+
+            if(toCalculateLat == null || toCalculateLon== null) {
+                continue;
             }
             double startDistance = distanceCalc.calcDist(startLat,startLon,toCalculateLat, toCalculateLon);
             double endDistance = distanceCalc.calcDist(endLat,endLon,toCalculateLat, toCalculateLon);
 
+            if (i == 0) {
+                forwardDirection = endDistance - startDistance > 0 ? true : false;
+            }
+
             if (startDistance < closestStartDistance) {
+                secondClosestStartIndex = closestStartIndex;
                 closestStartDistance = startDistance;
                 closestStartIndex = i;
+
             }
             if (endDistance < closestEndDistance) {
+                secondClosestEndIndex = closestEndIndex;
                 closestEndDistance = endDistance;
                 closestEndIndex = i;
             }
         }
         if (closestStartIndex != closestEndIndex) {
-            if (closestStartIndex < closestEndIndex) {
-                for (int wayIndex=closestStartIndex; wayIndex <= closestEndIndex; wayIndex++) {
-                    nodes.add(wayNodes[wayIndex]);
-                }
-            }else {
-                for (int wayIndex=closestStartIndex; wayIndex >= closestEndIndex; wayIndex--) {
-                    nodes.add(wayNodes[wayIndex]);
-                }
-            }
+            addAlongNodes(nodes, wayNodes, closestStartIndex, closestEndIndex);
         }else {
-            if (closestStartIndex > 0) {
-                nodes.add(wayNodes[closestStartIndex--]);
-                nodes.add(wayNodes[closestStartIndex]);
-            } else {
-                nodes.add(wayNodes[closestStartIndex]);
-                nodes.add(wayNodes[closestStartIndex++]);
+            if (secondClosestStartIndex != -1 && secondClosestEndIndex != -1) {
+                if (secondClosestStartIndex != secondClosestEndIndex) {
+                    Integer internalSecondStartNodeId = osmNodeIdToInternalMap.get(wayNodes[secondClosestStartIndex]);
+                    Integer internalSecondEndNodeId = osmNodeIdToInternalMap.get(wayNodes[secondClosestEndIndex]);
+                    Double secondStartLat = getLatByInternalNodeId(internalSecondStartNodeId);
+                    Double secondStartLon = getLonByInternalNodeId(internalSecondStartNodeId);
+                    Double secondEndLat = getLonByInternalNodeId(internalSecondEndNodeId);
+                    Double secondEndLon = getLonByInternalNodeId(internalSecondEndNodeId);
+                    if (secondStartLat != null && secondStartLon != null && secondEndLat != null && secondEndLon != null) {
+                        double extendDistance = distanceCalc.calcDist(secondStartLat,secondStartLon,secondEndLat, secondEndLon);
+                        double baseDistance = distanceCalc.calcDist(startLat,startLon,endLat,endLon);
+                        if (baseDistance/extendDistance > 0.4) {
+                            nodes.add(wayNodes[secondClosestStartIndex]);
+                            nodes.add(wayNodes[secondClosestEndIndex]);
+                        }
+                    }
+                }  else {
+                    if (forwardDirection) {
+                        if (closestStartIndex > secondClosestStartIndex) {
+                            nodes.add(wayNodes[secondClosestStartIndex]);
+                            nodes.add(wayNodes[closestStartIndex]);
+                        } else {
+                            nodes.add(wayNodes[closestStartIndex]);
+                            nodes.add(wayNodes[secondClosestStartIndex]);
+                        }
+                    }else {
+                        if (closestStartIndex > secondClosestStartIndex) {
+                            nodes.add(wayNodes[closestStartIndex]);
+                            nodes.add(wayNodes[secondClosestStartIndex]);
+                        } else {
+                            nodes.add(wayNodes[secondClosestStartIndex]);
+                            nodes.add(wayNodes[closestStartIndex]);
+                        }
+                    }
+                }
             }
-
         }
         return nodes;
+    }
+
+    private void addAlongNodes(List<Long> nodes, long[] wayNodes, int closestStartIndex, int closestEndIndex) {
+        if (closestStartIndex < closestEndIndex) {
+            for (int wayIndex=closestStartIndex; wayIndex <= closestEndIndex; wayIndex++) {
+                nodes.add(wayNodes[wayIndex]);
+            }
+        }else {
+            for (int wayIndex=closestStartIndex; wayIndex >= closestEndIndex; wayIndex--) {
+                nodes.add(wayNodes[wayIndex]);
+            }
+        }
     }
 
     public Long findCrossNode(int startInternalWayId, int endInternalWayId) {
@@ -326,6 +368,28 @@ public class GrabGraphHopper extends GraphHopperOSM {
 
     public LongIntMap getOsmNodeIdToInternalMap() {
         return osmNodeIdToInternalMap;
+    }
+
+    private Double getLatByInternalNodeId(int internalNodeId){
+        if (internalNodeId > 0) {
+            return this.getPillarNodeLat(internalNodeId);
+        }else {
+            if (internalNodeId > -3) {
+                return null;
+            }
+            return super.getGraphHopperStorage().getNodeAccess().getLat(-internalNodeId - 3);
+        }
+    }
+
+    private Double getLonByInternalNodeId(int internalNodeId){
+        if (internalNodeId > 0) {
+            return this.getPillarNodeLon(internalNodeId);
+        }else {
+            if (internalNodeId > -3) {
+                return null;
+            }
+            return super.getGraphHopperStorage().getNodeAccess().getLon(-internalNodeId - 3);
+        }
     }
 
 }
